@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, User, Building } from 'lucide-react';
+import { Search, Plus, Clock, AlertCircle, CheckCircle2, User, Building } from 'lucide-react';
 import { ticketAPI, categoryAPI, customerAPI, formatDate, getPriorityColor, getStatusColor, formatError } from '../services/api';
 
 const ClientPortal = () => {
@@ -31,7 +31,7 @@ const ClientPortal = () => {
     if (selectedCustomer) {
       loadTickets();
     }
-  }, [selectedCustomer, filters]);
+  }, [selectedCustomer, filters, loadTickets]);
 
   const loadInitialData = async () => {
     try {

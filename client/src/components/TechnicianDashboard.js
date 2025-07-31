@@ -1,28 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Clock, 
-  User, 
-  AlertTriangle, 
-  CheckCircle2, 
-  MessageSquare, 
-  Settings, 
-  Filter,
-  Plus,
-  ChevronDown,
-  ChevronRight,
-  Building,
-  Calendar
-} from 'lucide-react';
-import { 
-  ticketAPI, 
-  technicianAPI, 
-  customerAPI, 
-  categoryAPI,
-  formatDate, 
-  getPriorityColor, 
-  getStatusColor, 
-  formatError 
-} from '../services/api';
+import { Search, Clock, CheckCircle, AlertCircle, User, Building } from 'lucide-react';
+import { ticketAPI, categoryAPI, formatDate, getPriorityColor, getStatusColor, formatError } from '../services/api';
 
 const TechnicianDashboard = () => {
   const [tickets, setTickets] = useState([]);
@@ -57,7 +35,7 @@ const TechnicianDashboard = () => {
 
   useEffect(() => {
     loadTickets();
-  }, [selectedTechnician, filters]);
+  }, [loadTickets]);
 
   const loadInitialData = async () => {
     try {
@@ -267,7 +245,7 @@ const TechnicianDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center">
-              <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
               <span className="text-red-800">{error}</span>
             </div>
           </div>
@@ -414,7 +392,7 @@ const TechnicianDashboard = () => {
             
             {tickets.length === 0 ? (
               <div className="text-center py-12">
-                <CheckCircle2 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <CheckCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No tickets found</h3>
                 <p className="text-gray-600">Try adjusting your filters to see more tickets.</p>
               </div>
