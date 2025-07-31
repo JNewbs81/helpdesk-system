@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Clock, CheckCircle, AlertCircle, User, Building } from 'lucide-react';
-import { ticketAPI, categoryAPI, formatDate, getPriorityColor, getStatusColor, formatError } from '../services/api';
+import { Search, Clock, CheckCircle, AlertCircle, User, Building, ChevronDown, ChevronRight, Settings } from 'lucide-react';
+import { ticketAPI, categoryAPI, technicianAPI, formatDate, getPriorityColor, getStatusColor, formatError } from '../services/api';
 
 const TechnicianDashboard = () => {
   const [tickets, setTickets] = useState([]);
