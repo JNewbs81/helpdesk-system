@@ -2,7 +2,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { Users, Wrench, Building, Settings, BarChart3 } from 'lucide-react';
+import { Users, Wrench, Building, Settings, BarChart3, Ticket } from 'lucide-react';
 
 // Import components
 import ClientPortal from './components/ClientPortal';
