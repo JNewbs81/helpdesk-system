@@ -29,14 +29,12 @@ const ClientPortal = () => {
 
   const loadTickets = useCallback(async () => {
     if (!selectedCustomer) return;
-    
     try {
       const params = {
         ...filters,
         customer_id: selectedCustomer,
         limit: 100
       };
-      
       const response = await ticketAPI.getTickets(params);
       setTickets(response.data);
     } catch (err) {
