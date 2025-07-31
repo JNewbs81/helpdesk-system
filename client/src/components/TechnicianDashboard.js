@@ -12,7 +12,6 @@ import {
 import { 
   ticketAPI, 
   technicianAPI, 
-  categoryAPI, 
   formatDate, 
   getPriorityColor, 
   getStatusColor, 

@@ -27,6 +27,23 @@ const ClientPortal = () => {
     loadInitialData();
   }, []);
 
+  const loadTickets = useCallback(async () => {
+    if (!selectedCustomer) return;
+    
+    try {
+      const params = {
+        ...filters,
+        customer_id: selectedCustomer,
+        limit: 100
+      };
+      
+      const response = await ticketAPI.getTickets(params);
+      setTickets(response.data);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }, [selectedCustomer, filters]);
+
   useEffect(() => {
     if (selectedCustomer) {
       loadTickets();
@@ -56,23 +73,6 @@ const ClientPortal = () => {
       setLoading(false);
     }
   };
-
-  const loadTickets = useCallback(async () => {
-    if (!selectedCustomer) return;
-    
-    try {
-      const params = {
-        ...filters,
-        customer_id: selectedCustomer,
-        limit: 100
-      };
-      
-      const response = await ticketAPI.getTickets(params);
-      setTickets(response.data);
-    } catch (err) {
-      setError(formatError(err));
-    }
-  }, [selectedCustomer, filters]);
 
   const handleCreateTicket = async () => {
     if (!newTicket.title || !newTicket.description || !newTicket.customer_id) {
