@@ -1,33 +1,67 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Clock, CheckCircle, AlertCircle, User, Building, ChevronDown, ChevronRight, Settings } from 'lucide-react';
-import { ticketAPI, categoryAPI, technicianAPI, formatDate, getPriorityColor, getStatusColor, formatError } from '../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Search, 
+  User, 
+  Clock, 
+  AlertCircle, 
+  CheckCircle2, 
+  Users, 
+  Ticket, 
+  Activity 
+} from 'lucide-react';
+import { 
+  ticketAPI, 
+  technicianAPI, 
+  categoryAPI, 
+  formatDate, 
+  getPriorityColor, 
+  getStatusColor, 
+  formatError 
+} from '../services/api';
 
 const TechnicianDashboard = () => {
   const [tickets, setTickets] = useState([]);
   const [technicians, setTechnicians] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [selectedTechnician, setSelectedTechnician] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedTicket, setExpandedTicket] = useState(null);
-  const [workloadSummary, setWorkloadSummary] = useState([]);
+  const [workloadSummary, setWorkloadSummary] = useState({});
+  
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
-    assigned_only: 'false'
+    technician_id: '',
+    search: ''
   });
+
+  const [updateData, setUpdateData] = useState({
+    ticketId: null,
+    assigned_technician_id: '',
+    status: '',
+    priority: '',
+    resolution_notes: ''
+  });
+
   const [newComment, setNewComment] = useState({
     ticketId: null,
+    technician_id: 1, // Default technician - in real app, get from auth
     comment_text: '',
     is_internal: true
   });
-  const [ticketUpdate, setTicketUpdate] = useState({
-    ticketId: null,
-    status: '',
-    priority: '',
-    assigned_technician_id: '',
-    resolution_notes: ''
-  });
+
+  const loadTickets = useCallback(async () => {
+    try {
+      const params = {
+        ...filters,
+        limit: 100
+      };
+      
+      const response = await ticketAPI.getTickets(params);
+      setTickets(response.data);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }, [filters]);
 
   useEffect(() => {
     loadInitialData();
@@ -35,26 +69,19 @@ const TechnicianDashboard = () => {
 
   useEffect(() => {
     loadTickets();
-  }, [loadTickets]);
+  }, [filters, loadTickets]);
 
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const [techniciansRes, categoriesRes, workloadRes] = await Promise.all([
+      const [techniciansRes, workloadRes] = await Promise.all([
         technicianAPI.getTechnicians(),
-        categoryAPI.getCategories(),
         technicianAPI.getWorkloadSummary()
       ]);
       
       setTechnicians(techniciansRes.data.technicians || techniciansRes.data);
-      setCategories(categoriesRes.data);
       setWorkloadSummary(workloadRes.data);
       
-      // Auto-select first active technician
-      const activeTechnicians = techniciansRes.data.technicians || techniciansRes.data;
-      if (activeTechnicians.length > 0) {
-        setSelectedTechnician(activeTechnicians[0].technician_id.toString());
-      }
     } catch (err) {
       setError(formatError(err));
     } finally {
@@ -62,44 +89,26 @@ const TechnicianDashboard = () => {
     }
   };
 
-  const loadTickets = async () => {
-    try {
-      const params = {
-        ...filters,
-        limit: 100
-      };
-      
-      if (filters.assigned_only === 'true' && selectedTechnician) {
-        params.technician_id = selectedTechnician;
-      }
-      
-      const response = await ticketAPI.getTickets(params);
-      setTickets(response.data);
-    } catch (err) {
-      setError(formatError(err));
-    }
-  };
+  const handleUpdateTicket = async () => {
+    if (!updateData.ticketId) return;
 
-  const handleUpdateTicket = async (ticketId) => {
     try {
-      const updateData = { ...ticketUpdate };
-      delete updateData.ticketId;
+      const updatePayload = {};
+      if (updateData.assigned_technician_id) updatePayload.assigned_technician_id = parseInt(updateData.assigned_technician_id);
+      if (updateData.status) updatePayload.status = updateData.status;
+      if (updateData.priority) updatePayload.priority = updateData.priority;
+      if (updateData.resolution_notes) updatePayload.resolution_notes = updateData.resolution_notes;
+
+      await ticketAPI.updateTicket(updateData.ticketId, updatePayload);
       
-      // Remove empty fields
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] === '') {
-          delete updateData[key];
-        }
-      });
-      
-      await ticketAPI.updateTicket(ticketId, updateData);
-      setTicketUpdate({
+      setUpdateData({
         ticketId: null,
+        assigned_technician_id: '',
         status: '',
         priority: '',
-        assigned_technician_id: '',
         resolution_notes: ''
       });
+      
       loadTickets();
       setError('');
     } catch (err) {
@@ -107,71 +116,47 @@ const TechnicianDashboard = () => {
     }
   };
 
-  const handleAddComment = async (ticketId) => {
-    if (!newComment.comment_text || !selectedTechnician) {
-      setError('Please enter a comment and select a technician');
-      return;
-    }
+  const handleAddComment = async () => {
+    if (!newComment.ticketId || !newComment.comment_text.trim()) return;
 
     try {
-      await ticketAPI.addComment(ticketId, {
-        ...newComment,
-        technician_id: selectedTechnician
+      await ticketAPI.addComment(newComment.ticketId, {
+        technician_id: newComment.technician_id,
+        comment_text: newComment.comment_text,
+        is_internal: newComment.is_internal
       });
       
       setNewComment({
         ticketId: null,
+        technician_id: 1,
         comment_text: '',
         is_internal: true
       });
       
-      // Reload the expanded ticket to show new comment
-      if (expandedTicket === ticketId) {
-        loadExpandedTicket(ticketId);
-      }
+      loadTickets();
       setError('');
     } catch (err) {
       setError(formatError(err));
     }
   };
 
-  const loadExpandedTicket = async (ticketId) => {
-    try {
-      const response = await ticketAPI.getTicket(ticketId);
-      const ticket = response.data;
-      
-      // Update the ticket in the list with full details
-      setTickets(prev => prev.map(t => 
-        t.ticket_id === ticketId ? { ...t, ...ticket } : t
-      ));
-    } catch (err) {
-      setError(formatError(err));
-    }
-  };
-
-  const toggleTicketExpansion = async (ticketId) => {
-    if (expandedTicket === ticketId) {
-      setExpandedTicket(null);
-    } else {
-      setExpandedTicket(ticketId);
-      await loadExpandedTicket(ticketId);
-    }
-  };
-
-  const getSelectedTechnicianInfo = () => {
-    return technicians.find(t => t.technician_id.toString() === selectedTechnician);
+  const getWorkloadStats = () => {
+    if (!Array.isArray(workloadSummary)) return { totalActive: 0, totalTechnicians: 0 };
+    
+    return {
+      totalActive: workloadSummary.reduce((sum, tech) => sum + (tech.active_tickets || 0), 0),
+      totalTechnicians: workloadSummary.length
+    };
   };
 
   const getTicketStats = () => {
-    const stats = {
+    return {
       total: tickets.length,
       new: tickets.filter(t => t.status === 'New').length,
       inProgress: tickets.filter(t => t.status === 'In Progress').length,
       waiting: tickets.filter(t => t.status === 'Waiting for Customer').length,
-      critical: tickets.filter(t => t.priority === 'Critical').length,
-      high: tickets.filter(t => t.priority === 'High').length
+      resolved: tickets.filter(t => t.status === 'Resolved').length
     };
-    return stats;
   };
 
   if (loading) {
@@ -185,8 +170,8 @@ const TechnicianDashboard = () => {
     );
   }
 
-  const technicianInfo = getSelectedTechnicianInfo();
   const stats = getTicketStats();
+  const workloadStats = getWorkloadStats();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -196,48 +181,15 @@ const TechnicianDashboard = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Technician Dashboard</h1>
-              <p className="text-gray-600">Manage support tickets and customer requests</p>
+              <p className="text-gray-600">Manage support tickets and team workload</p>
             </div>
-            
             <div className="flex items-center space-x-4">
-              <select
-                value={selectedTechnician}
-                onChange={(e) => setSelectedTechnician(e.target.value)}
-                className="rounded-lg border border-gray-300 px-3 py-2 bg-white"
-              >
-                <option value="">All Technicians</option>
-                {technicians.map(tech => (
-                  <option key={tech.technician_id} value={tech.technician_id}>
-                    {tech.first_name} {tech.last_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          
-          {technicianInfo && (
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <User className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <h3 className="font-medium text-blue-900">
-                      {technicianInfo.first_name} {technicianInfo.last_name}
-                    </h3>
-                    <p className="text-blue-700 text-sm">{technicianInfo.email}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm text-blue-700">
-                    Active Tickets: {tickets.filter(t => 
-                      t.assigned_technician_id?.toString() === selectedTechnician && 
-                      !['Resolved', 'Closed'].includes(t.status)
-                    ).length}
-                  </div>
-                </div>
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{workloadStats.totalActive}</span> active tickets across{' '}
+                <span className="font-medium">{workloadStats.totalTechnicians}</span> technicians
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -254,59 +206,17 @@ const TechnicianDashboard = () => {
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold text-sm">{stats.total}</span>
+                  <Ticket className="h-5 w-5 text-blue-600" />
                 </div>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">Total</p>
-                <p className="text-xs text-gray-500">All tickets</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold text-sm">{stats.new}</span>
-                </div>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">New</p>
-                <p className="text-xs text-gray-500">Unassigned</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <span className="text-purple-600 font-semibold text-sm">{stats.inProgress}</span>
-                </div>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">In Progress</p>
-                <p className="text-xs text-gray-500">Active work</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <span className="text-yellow-600 font-semibold text-sm">{stats.waiting}</span>
-                </div>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">Waiting</p>
-                <p className="text-xs text-gray-500">Customer</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.total}</p>
+                <p className="text-sm text-gray-600">Total Tickets</p>
               </div>
             </div>
           </div>
@@ -315,12 +225,12 @@ const TechnicianDashboard = () => {
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                  <span className="text-red-600 font-semibold text-sm">{stats.critical}</span>
+                  <AlertCircle className="h-5 w-5 text-red-600" />
                 </div>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">Critical</p>
-                <p className="text-xs text-gray-500">Urgent</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.new}</p>
+                <p className="text-sm text-gray-600">New Tickets</p>
               </div>
             </div>
           </div>
@@ -328,59 +238,126 @@ const TechnicianDashboard = () => {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <span className="text-orange-600 font-semibold text-sm">{stats.high}</span>
+                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Activity className="h-5 w-5 text-purple-600" />
                 </div>
               </div>
               <div className="ml-3">
-                <p className="text-sm font-medium text-gray-900">High</p>
-                <p className="text-xs text-gray-500">Priority</p>
+                <p className="text-2xl font-semibold text-gray-900">{stats.inProgress}</p>
+                <p className="text-sm text-gray-600">In Progress</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                </div>
+              </div>
+              <div className="ml-3">
+                <p className="text-2xl font-semibold text-gray-900">{stats.resolved}</p>
+                <p className="text-sm text-gray-600">Resolved</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="bg-white rounded-lg shadow mb-6 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                className="rounded-lg border border-gray-300 px-3 py-2"
-              >
-                <option value="">All Status</option>
-                <option value="New">New</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Waiting for Customer">Waiting for Customer</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Closed">Closed</option>
-              </select>
+        {/* Team Workload Overview */}
+        {Array.isArray(workloadSummary) && workloadSummary.length > 0 && (
+          <div className="bg-white rounded-lg shadow mb-6">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Team Workload</h3>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {workloadSummary.map(tech => (
+                  <div key={tech.technician_id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <User className="h-4 w-4 text-gray-400 mr-2" />
+                        <span className="font-medium text-gray-900">
+                          {tech.first_name} {tech.last_name}
+                        </span>
+                      </div>
+                      <span className="text-sm text-gray-500">{tech.email}</span>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <div className="flex justify-between">
+                        <span>Active Tickets:</span>
+                        <span className="font-medium">{tech.active_tickets || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total Assigned:</span>
+                        <span className="font-medium">{tech.total_tickets || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
-              <select
-                value={filters.priority}
-                onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                className="rounded-lg border border-gray-300 px-3 py-2"
-              >
-                <option value="">All Priority</option>
-                <option value="Critical">Critical</option>
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+              <div className="flex items-center space-x-4">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search tickets..."
+                    value={filters.search}
+                    onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
 
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={filters.assigned_only === 'true'}
-                  onChange={(e) => setFilters({ 
-                    ...filters, 
-                    assigned_only: e.target.checked ? 'true' : 'false' 
-                  })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">My tickets only</span>
-              </label>
+                {/* Status Filter */}
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                  className="rounded-lg border border-gray-300 px-3 py-2"
+                >
+                  <option value="">All Status</option>
+                  <option value="New">New</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Waiting for Customer">Waiting for Customer</option>
+                  <option value="Resolved">Resolved</option>
+                  <option value="Closed">Closed</option>
+                </select>
+
+                {/* Priority Filter */}
+                <select
+                  value={filters.priority}
+                  onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
+                  className="rounded-lg border border-gray-300 px-3 py-2"
+                >
+                  <option value="">All Priority</option>
+                  <option value="Critical">Critical</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+
+                {/* Technician Filter */}
+                <select
+                  value={filters.technician_id}
+                  onChange={(e) => setFilters({ ...filters, technician_id: e.target.value })}
+                  className="rounded-lg border border-gray-300 px-3 py-2"
+                >
+                  <option value="">All Technicians</option>
+                  {technicians.map(tech => (
+                    <option key={tech.technician_id} value={tech.technician_id}>
+                      {tech.first_name} {tech.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -392,27 +369,23 @@ const TechnicianDashboard = () => {
             
             {tickets.length === 0 ? (
               <div className="text-center py-12">
-                <CheckCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <Ticket className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No tickets found</h3>
-                <p className="text-gray-600">Try adjusting your filters to see more tickets.</p>
+                <p className="text-gray-600">
+                  {Object.values(filters).some(f => f) ? 
+                    'Try adjusting your filters to see more tickets.' :
+                    'No support tickets available at the moment.'
+                  }
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
                 {tickets.map(ticket => (
-                  <div key={ticket.ticket_id} className="border border-gray-200 rounded-lg">
+                  <div key={ticket.ticket_id} className="border border-gray-200 rounded-lg overflow-hidden">
                     <div className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-2">
-                            <button
-                              onClick={() => toggleTicketExpansion(ticket.ticket_id)}
-                              className="flex items-center text-gray-400 hover:text-gray-600"
-                            >
-                              {expandedTicket === ticket.ticket_id ? 
-                                <ChevronDown className="h-4 w-4" /> : 
-                                <ChevronRight className="h-4 w-4" />
-                              }
-                            </button>
                             <h4 className="font-medium text-gray-900">#{ticket.ticket_number}</h4>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
                               {ticket.priority}
@@ -432,12 +405,8 @@ const TechnicianDashboard = () => {
                           
                           <div className="flex items-center text-xs text-gray-500 space-x-4">
                             <div className="flex items-center">
-                              <Building className="h-3 w-3 mr-1" />
+                              <Users className="h-3 w-3 mr-1" />
                               {ticket.company_name}
-                            </div>
-                            <div className="flex items-center">
-                              <User className="h-3 w-3 mr-1" />
-                              {ticket.contact_name}
                             </div>
                             <div className="flex items-center">
                               <Clock className="h-3 w-3 mr-1" />
@@ -445,191 +414,120 @@ const TechnicianDashboard = () => {
                             </div>
                             {ticket.assigned_technician && (
                               <div className="flex items-center">
-                                <Settings className="h-3 w-3 mr-1" />
+                                <User className="h-3 w-3 mr-1" />
                                 {ticket.assigned_technician}
                               </div>
                             )}
                           </div>
                         </div>
                         
-                        <div className="flex space-x-2 ml-4">
-                          <button
-                            onClick={() => setTicketUpdate({
-                              ticketId: ticket.ticket_id,
-                              status: ticket.status,
-                              priority: ticket.priority,
-                              assigned_technician_id: ticket.assigned_technician_id || '',
-                              resolution_notes: ticket.resolution_notes || ''
-                            })}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                          >
-                            Update
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => setExpandedTicket(expandedTicket === ticket.ticket_id ? null : ticket.ticket_id)}
+                          className="ml-4 px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                        >
+                          {expandedTicket === ticket.ticket_id ? 'Collapse' : 'Expand'}
+                        </button>
                       </div>
                     </div>
 
                     {/* Expanded Content */}
                     {expandedTicket === ticket.ticket_id && (
-                      <div className="border-t border-gray-200 p-4 bg-gray-50">
-                        {/* Comments Section */}
-                        {ticket.comments && ticket.comments.length > 0 && (
-                          <div className="mb-4">
-                            <h6 className="font-medium text-gray-900 mb-2">Comments</h6>
-                            <div className="space-y-2">
-                              {ticket.comments.map(comment => (
-                                <div key={comment.comment_id} className="bg-white p-3 rounded border">
-                                  <div className="flex justify-between items-start mb-1">
-                                    <span className="font-medium text-sm text-gray-900">
-                                      {comment.technician_name}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {formatDate(comment.created_at)}
-                                    </span>
-                                  </div>
-                                  <p className="text-sm text-gray-700">{comment.comment_text}</p>
-                                  {comment.is_internal && (
-                                    <span className="inline-block mt-1 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded">
-                                      Internal
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
+                      <div className="border-t border-gray-200 bg-gray-50">
+                        <div className="p-4 space-y-4">
+                          {/* Update Ticket Form */}
+                          <div>
+                            <h6 className="font-medium text-gray-900 mb-3">Update Ticket</h6>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                              <select
+                                value={updateData.ticketId === ticket.ticket_id ? updateData.assigned_technician_id : ''}
+                                onChange={(e) => setUpdateData({ ...updateData, ticketId: ticket.ticket_id, assigned_technician_id: e.target.value })}
+                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                              >
+                                <option value="">Assign Technician</option>
+                                {technicians.map(tech => (
+                                  <option key={tech.technician_id} value={tech.technician_id}>
+                                    {tech.first_name} {tech.last_name}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <select
+                                value={updateData.ticketId === ticket.ticket_id ? updateData.status : ''}
+                                onChange={(e) => setUpdateData({ ...updateData, ticketId: ticket.ticket_id, status: e.target.value })}
+                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                              >
+                                <option value="">Update Status</option>
+                                <option value="New">New</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Waiting for Customer">Waiting for Customer</option>
+                                <option value="Resolved">Resolved</option>
+                                <option value="Closed">Closed</option>
+                              </select>
+
+                              <select
+                                value={updateData.ticketId === ticket.ticket_id ? updateData.priority : ''}
+                                onChange={(e) => setUpdateData({ ...updateData, ticketId: ticket.ticket_id, priority: e.target.value })}
+                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                              >
+                                <option value="">Change Priority</option>
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                              </select>
+
+                              <button
+                                onClick={handleUpdateTicket}
+                                disabled={!updateData.ticketId}
+                                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                              >
+                                Update
+                              </button>
+                            </div>
+                            
+                            {/* Resolution Notes */}
+                            <div className="flex items-center space-x-2">
+                              <textarea
+                                rows={2}
+                                placeholder="Resolution notes..."
+                                value={updateData.ticketId === ticket.ticket_id ? updateData.resolution_notes : ''}
+                                onChange={(e) => setUpdateData({ ...updateData, ticketId: ticket.ticket_id, resolution_notes: e.target.value })}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
                             </div>
                           </div>
-                        )}
 
-                        {/* Add Comment */}
-                        <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Add Comment
-                          </label>
-                          <textarea
-                            value={newComment.ticketId === ticket.ticket_id ? newComment.comment_text : ''}
-                            onChange={(e) => setNewComment({
-                              ticketId: ticket.ticket_id,
-                              comment_text: e.target.value,
-                              is_internal: newComment.is_internal
-                            })}
-                            rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Add a comment..."
-                          />
-                          <div className="flex justify-between items-center mt-2">
-                            <label className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={newComment.is_internal}
-                                onChange={(e) => setNewComment({
-                                  ...newComment,
-                                  is_internal: e.target.checked
-                                })}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          {/* Add Comment Form */}
+                          <div>
+                            <h6 className="font-medium text-gray-900 mb-3">Add Comment</h6>
+                            <div className="flex items-start space-x-2">
+                              <textarea
+                                rows={3}
+                                placeholder="Add internal note or customer communication..."
+                                value={newComment.ticketId === ticket.ticket_id ? newComment.comment_text : ''}
+                                onChange={(e) => setNewComment({ ...newComment, ticketId: ticket.ticket_id, comment_text: e.target.value })}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                               />
-                              <span className="text-sm text-gray-700">Internal comment</span>
-                            </label>
-                            <button
-                              onClick={() => handleAddComment(ticket.ticket_id)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition-colors"
-                            >
-                              Add Comment
-                            </button>
+                              <div className="flex flex-col space-y-2">
+                                <label className="flex items-center text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={newComment.ticketId === ticket.ticket_id ? newComment.is_internal : true}
+                                    onChange={(e) => setNewComment({ ...newComment, ticketId: ticket.ticket_id, is_internal: e.target.checked })}
+                                    className="mr-2"
+                                  />
+                                  Internal Only
+                                </label>
+                                <button
+                                  onClick={handleAddComment}
+                                  disabled={!newComment.ticketId || !newComment.comment_text.trim()}
+                                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                                >
+                                  Add Comment
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Update Ticket Modal */}
-                    {ticketUpdate.ticketId === ticket.ticket_id && (
-                      <div className="border-t border-gray-200 p-4 bg-blue-50">
-                        <h6 className="font-medium text-gray-900 mb-3">Update Ticket</h6>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Status
-                            </label>
-                            <select
-                              value={ticketUpdate.status}
-                              onChange={(e) => setTicketUpdate({ ...ticketUpdate, status: e.target.value })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                              <option value="">No change</option>
-                              <option value="New">New</option>
-                              <option value="In Progress">In Progress</option>
-                              <option value="Waiting for Customer">Waiting for Customer</option>
-                              <option value="Resolved">Resolved</option>
-                              <option value="Closed">Closed</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Priority
-                            </label>
-                            <select
-                              value={ticketUpdate.priority}
-                              onChange={(e) => setTicketUpdate({ ...ticketUpdate, priority: e.target.value })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                              <option value="">No change</option>
-                              <option value="Low">Low</option>
-                              <option value="Medium">Medium</option>
-                              <option value="High">High</option>
-                              <option value="Critical">Critical</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Assign to Technician
-                            </label>
-                            <select
-                              value={ticketUpdate.assigned_technician_id}
-                              onChange={(e) => setTicketUpdate({ ...ticketUpdate, assigned_technician_id: e.target.value })}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                              <option value="">No change</option>
-                              {technicians.map(tech => (
-                                <option key={tech.technician_id} value={tech.technician_id}>
-                                  {tech.first_name} {tech.last_name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="mt-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Resolution Notes
-                          </label>
-                          <textarea
-                            value={ticketUpdate.resolution_notes}
-                            onChange={(e) => setTicketUpdate({ ...ticketUpdate, resolution_notes: e.target.value })}
-                            rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Add resolution notes..."
-                          />
-                        </div>
-
-                        <div className="flex space-x-3 mt-4">
-                          <button
-                            onClick={() => handleUpdateTicket(ticket.ticket_id)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-                          >
-                            Update Ticket
-                          </button>
-                          <button
-                            onClick={() => setTicketUpdate({
-                              ticketId: null,
-                              status: '',
-                              priority: '',
-                              assigned_technician_id: '',
-                              resolution_notes: ''
-                            })}
-                            className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg transition-colors"
-                          >
-                            Cancel
-                          </button>
                         </div>
                       </div>
                     )}
@@ -639,82 +537,6 @@ const TechnicianDashboard = () => {
             )}
           </div>
         </div>
-
-        {/* Workload Summary */}
-        {workloadSummary.length > 0 && (
-          <div className="mt-6 bg-white rounded-lg shadow">
-            <div className="p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Team Workload Summary</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Technician
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Active Tickets
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Critical
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        High Priority
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Assigned
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Avg Resolution (hrs)
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {workloadSummary.map(tech => (
-                      <tr key={tech.technician_id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <User className="h-5 w-5 text-gray-400 mr-2" />
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {tech.technician_name}
-                              </div>
-                              <div className="text-sm text-gray-500">{tech.email}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {tech.active_tickets || 0}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            {tech.critical_tickets || 0}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                            {tech.high_priority_tickets || 0}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {tech.total_assigned_tickets || 0}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {tech.avg_resolution_time_hours ? 
-                            Math.round(tech.avg_resolution_time_hours * 10) / 10 : 
-                            'N/A'
-                          }
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

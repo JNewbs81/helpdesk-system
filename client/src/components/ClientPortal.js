@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, Clock, AlertCircle, CheckCircle2, User, Building } from 'lucide-react';
 import { ticketAPI, categoryAPI, customerAPI, formatDate, getPriorityColor, getStatusColor, formatError } from '../services/api';
 
@@ -57,14 +57,14 @@ const ClientPortal = () => {
     }
   };
 
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async () => {
     if (!selectedCustomer) return;
     
     try {
       const params = {
-        customer_id: selectedCustomer,
         ...filters,
-        limit: 50
+        customer_id: selectedCustomer,
+        limit: 100
       };
       
       const response = await ticketAPI.getTickets(params);
@@ -72,7 +72,7 @@ const ClientPortal = () => {
     } catch (err) {
       setError(formatError(err));
     }
-  };
+  }, [selectedCustomer, filters]);
 
   const handleCreateTicket = async () => {
     if (!newTicket.title || !newTicket.description || !newTicket.customer_id) {
