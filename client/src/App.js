@@ -2,7 +2,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { Users, Wrench, Building, Settings, BarChart3, Ticket } from 'lucide-react';
+import { Users, Wrench, Building, Settings, BarChart3 } from 'lucide-react';
 
 // Import components
 import ClientPortal from './components/ClientPortal';
@@ -68,8 +68,8 @@ const Navigation = () => {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-2">
-              <Ticket className="h-8 w-8 text-blue-600" />
-              <span className="text-xl font-bold text-gray-900">IT Helpdesk</span>
+              <img src="/logo.png" alt="Newberry IT Solutions Logo" className="h-8 w-8" />
+              <span className="text-xl font-bold text-gray-900">Newberry IT Solutions</span>
             </Link>
           </div>
           
@@ -109,13 +109,12 @@ const HomePage = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="text-center mb-12">
-          <Ticket className="h-20 w-20 text-blue-600 mx-auto mb-4" />
+          <img src="/logo.png" alt="Newberry IT Solutions Logo" className="h-24 w-24 mx-auto mb-4" />
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            IT Helpdesk Management System
+            IT Help Desk Solutions for Businesses and Non-Profits
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Streamline your IT support operations with our comprehensive ticketing system. 
-            Manage customer requests, track technician workloads, and analyze performance metrics.
+            Server & PC Support • Network Administration & Management • Installation Services • Full-Stack Development • Azure & Microsoft 365 Experts
           </p>
         </div>
 
